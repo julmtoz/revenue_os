@@ -511,5 +511,12 @@ def list_contracts() -> None:
             typer.echo(f"  {contract_file.name} (parse error)")
 
 
+@app.command("bot")
+def run_bot() -> None:
+    """Start the Ozen Telegram bot (runs until Ctrl+C)."""
+    from interfaces.telegram_bot import run_bot as _run_bot
+    _run_bot()
+
+
 if __name__ == "__main__":
     app()
