@@ -1,0 +1,21 @@
+You are preparing a tight opportunity memo for a local service business owner.
+Use the findings to explain why their current web presence leaks revenue and how we can help.
+
+Provide a JSON object with keys:
+- summary: 2 concise sentences describing the state of their presence.
+- broken: list of 2-4 bullet-ready items describing what is broken or missing.
+- impact: list of 2-4 plain-language statements describing why those issues cost leads.
+- angle: one paragraph (3 sentences max) describing the improvement/offer angle our agency can pitch.
+
+Context:
+Name: {{ lead.name or "Unknown" }}
+City: {{ lead.city or "Unknown" }}
+Niche: {{ lead.category or desired_niche }}
+Website: {{ lead.website or "N/A" }}
+Findings:
+{{ findings_text }}
+
+Guidance:
+- Sound like a revenue-minded operator, not an SEO report.
+- Tie each broken element to lost form fills, calls, or homeowner trust.
+- Keep language concrete and free of jargon.
