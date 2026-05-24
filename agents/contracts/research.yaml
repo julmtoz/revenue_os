@@ -1,0 +1,30 @@
+name: research
+department: research
+purpose: Search web for information, summarize findings, cache results
+autonomy_level: 8
+
+allowed_tools:
+  - brave_search_api
+  - duckduckgo_fallback
+  - memory_store
+
+forbidden_actions:
+  - send_email
+  - post_publicly
+  - modify_files
+  - access_credentials
+
+input_format:
+  query: string
+
+output_format:
+  summary: string
+  sources: list[dict]
+  cached: boolean
+
+approval_required_for: []
+
+success_criteria:
+  - At least 3 sources found
+  - Summary is actionable
+  - Results saved to memory cache

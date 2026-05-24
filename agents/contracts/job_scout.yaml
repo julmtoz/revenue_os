@@ -1,0 +1,34 @@
+name: job_scout
+department: job_acquisition
+purpose: Find, score, and track IT job opportunities
+autonomy_level: 5
+
+allowed_tools:
+  - brave_search_api
+  - sqlite_db
+  - memory_store
+
+forbidden_actions:
+  - apply_to_jobs_automatically
+  - send_email
+  - contact_recruiters_without_approval
+
+input_format:
+  role: string
+  location: string
+  remote: boolean
+
+output_format:
+  jobs: list[dict]
+  top_score: integer
+  count: integer
+
+approval_required_for:
+  - applying to any job
+  - contacting any recruiter
+  - sharing resume
+
+success_criteria:
+  - At least 5 jobs found and scored
+  - Top jobs ranked correctly
+  - Saved to memory for tracking

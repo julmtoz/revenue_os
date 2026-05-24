@@ -1,0 +1,40 @@
+name: lead_hunter
+department: revenue
+purpose: Find local service business leads via Google Maps and Nominatim
+autonomy_level: 7
+
+allowed_tools:
+  - playwright_browser
+  - httpx_requests
+  - sqlite_db
+  - csv_export
+
+forbidden_actions:
+  - send_email
+  - send_sms
+  - post_publicly
+  - delete_files
+  - edit_live_website
+
+input_format:
+  city: string
+  niche: string
+  limit: integer (max 50)
+
+output_format:
+  lead_ids: list[int]
+  fallback_used: boolean
+  count: integer
+
+approval_required_for:
+  - contacting any lead
+  - exporting to external CRM
+
+success_criteria:
+  - At least 5 leads stored
+  - All leads have name and city
+  - Score calculated for each lead
+
+daily_limits:
+  max_runs: 4
+  max_leads_per_run: 50

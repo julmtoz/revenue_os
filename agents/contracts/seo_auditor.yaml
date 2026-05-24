@@ -1,0 +1,29 @@
+name: seo_auditor
+department: seo_marketing
+purpose: Audit websites for technical SEO issues and generate scored reports
+autonomy_level: 9
+
+allowed_tools:
+  - httpx_requests
+  - beautifulsoup_parser
+
+forbidden_actions:
+  - modify_website
+  - send_email
+  - post_publicly
+
+input_format:
+  url: string (must start with http:// or https://)
+
+output_format:
+  score: integer (0-100)
+  issues: list[dict]
+  report: string
+
+approval_required_for:
+  - sending report to client
+
+success_criteria:
+  - All 10 checks completed
+  - Score calculated
+  - Fixes prioritized by HIGH/MEDIUM/LOW

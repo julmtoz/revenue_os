@@ -1,0 +1,30 @@
+name: executive_assistant
+department: productivity
+purpose: Daily briefings, priority management, open loop detection
+autonomy_level: 8
+
+allowed_tools:
+  - sqlite_db
+  - memory_store
+  - read_missions
+  - read_approvals
+
+forbidden_actions:
+  - execute_missions_autonomously
+  - send_external_messages_without_approval
+  - access_financial_accounts
+
+input_format:
+  task: enum[briefing, priorities]
+
+output_format:
+  briefing: string
+  priorities: list[string]
+  warnings: list[string]
+
+approval_required_for: []
+
+success_criteria:
+  - Briefing covers all active departments
+  - Priorities are ranked and actionable
+  - Approval queue surfaced

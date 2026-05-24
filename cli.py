@@ -383,5 +383,133 @@ def daily_summary() -> None:
     typer.echo(orchestrator.daily_summary())
 
 
+@app.command("pause")
+def pause_system(reason: str = typer.Option("manual", help="Reason for pausing")) -> None:
+    """Pause all agent execution (kill switch)."""
+    from core.kill_switch import pause_all
+    from core.notifier import notify_kill_switch
+    pause_all(reason)
+    notify_kill_switch(activated=True, reason=reason)
+    typer.secho(f"SYSTEM PAUSED: {reason}", fg="red")
+
+
+@app.command("resume")
+def resume_system() -> None:
+    """Resume all agent execution."""
+    from core.kill_switch import resume_all, is_paused
+    from core.notifier import notify_kill_switch
+    if not is_paused():
+        typer.echo("System is not paused.")
+        return
+    resume_all()
+    notify_kill_switch(activated=False)
+    typer.secho("System resumed. Agents are active.", fg="green")
+
+
+@app.command("status")
+def system_status() -> None:
+    """Show system status: kill switch, config, costs."""
+    from core.kill_switch import is_paused
+    from core.cost_tracker import get_daily_cost, get_monthly_cost
+    settings = get_settings()
+    paused = is_paused()
+    daily = get_daily_cost()
+    monthly = get_monthly_cost()
+
+    typer.echo(f"System: {'PAUSED' if paused else 'ACTIVE'}")
+    typer.echo(f"DRY_RUN: {settings.dry_run} | APPROVAL_MODE: {settings.approval_mode}")
+    typer.echo(f"API Cost Today: ${daily['total']:.4f} | This Month: ${monthly['total']:.4f}")
+    typer.echo(f"Telegram: {'configured' if settings.telegram_bot_token else 'not set'}")
+
+
+@app.command("backup")
+def backup_cmd() -> None:
+    """Backup database and config."""
+    from core.backup import backup_db, backup_config, prune_backups
+    db_path = backup_db()
+    cfg_path = backup_config()
+    pruned = prune_backups(keep=10)
+    typer.echo(f"DB backup: {db_path}")
+    typer.echo(f"Config backup: {cfg_path}")
+    if pruned:
+        typer.echo(f"Pruned {pruned} old backup(s).")
+
+
+@app.command("eval")
+def evaluate_mission(
+    mission_id: int = typer.Argument(...),
+    useful: bool = typer.Option(True, help="Was this mission useful?"),
+    feedback: str = typer.Option("", help="Optional feedback"),
+    automate: bool = typer.Option(False, "--automate", help="Should this become a recurring workflow?"),
+) -> None:
+    """Evaluate a completed mission."""
+    from core.evaluator import record_evaluation
+    record_evaluation(mission_id, useful=useful, feedback=feedback, should_automate=automate)
+    typer.echo(f"Evaluation recorded for mission #{mission_id}")
+    if automate:
+        typer.secho("Marked as automation candidate.", fg="cyan")
+
+
+@app.command("performance")
+def agent_performance() -> None:
+    """Show agent performance scores."""
+    from core.evaluator import get_agent_performance
+    agents = ["lead_hunter", "research", "seo_auditor", "it_guardian", "job_scout", "executive_assistant", "audit_offer", "outreach"]
+    typer.echo("Agent Performance Scores:")
+    for agent in agents:
+        perf = get_agent_performance(agent)
+        typer.echo(f"  {agent}: {perf['score']}/10 ({perf['useful']}/{perf['runs']} useful)")
+
+
+@app.command("costs")
+def show_costs() -> None:
+    """Show API cost breakdown."""
+    from core.cost_tracker import get_daily_cost, get_monthly_cost
+    daily = get_daily_cost()
+    monthly = get_monthly_cost()
+    typer.echo(f"Today: ${daily['total']:.4f}")
+    for model, cost in daily.get("by_model", {}).items():
+        typer.echo(f"  {model}: ${cost:.4f}")
+    typer.echo(f"This Month: ${monthly['total']:.4f}")
+
+
+@app.command("notify")
+def send_notification(message: str = typer.Argument(...)) -> None:
+    """Send a message to yourself via Telegram."""
+    from core.notifier import send_telegram
+    ok = send_telegram(message)
+    typer.echo("Sent." if ok else "Failed — check TELEGRAM_BOT_TOKEN and TELEGRAM_OWNER_ID in .env")
+
+
+@app.command("automate-candidates")
+def automate_candidates() -> None:
+    """Show missions marked as candidates for automation."""
+    from core.evaluator import get_automation_candidates
+    candidates = get_automation_candidates()
+    if not candidates:
+        typer.echo("No automation candidates yet. Run eval --automate on missions that should repeat.")
+        return
+    typer.echo("Automation Candidates:")
+    for c in candidates:
+        typer.echo(f"  Mission #{c['mission_id']}: {c.get('feedback', 'no feedback')}")
+
+
+@app.command("contracts")
+def list_contracts() -> None:
+    """List all agent contracts."""
+    import yaml
+    contracts_dir = Path(__file__).parent / "agents" / "contracts"
+    if not contracts_dir.exists():
+        typer.echo("No contracts directory found.")
+        return
+    for contract_file in sorted(contracts_dir.glob("*.yaml")):
+        try:
+            with open(contract_file) as f:
+                c = yaml.safe_load(f)
+            typer.echo(f"  {c.get('name','?')} [{c.get('department','?')}] — autonomy {c.get('autonomy_level','?')}/10: {c.get('purpose','')}")
+        except Exception:
+            typer.echo(f"  {contract_file.name} (parse error)")
+
+
 if __name__ == "__main__":
     app()

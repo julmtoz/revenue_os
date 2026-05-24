@@ -1,0 +1,94 @@
+version: "1.0"
+prompts:
+  outreach_email_roofing:
+    id: outreach_email_roofing
+    category: revenue
+    description: Cold outreach email for roofing companies with weak websites
+    variables: [company_name, city, weakness, offer]
+    template: |
+      Subject: Quick question about {company_name}'s online presence
+
+      Hi {company_name} team,
+
+      I was looking at roofing companies in {city} and noticed your website {weakness}.
+
+      Most roofing companies lose 5-10 leads per month just from this — homeowners
+      check websites before calling.
+
+      I help local contractors fix this fast. {offer}
+
+      Worth a 10-minute call this week?
+
+      Best,
+      [Your Name]
+
+  seo_audit_intro:
+    id: seo_audit_intro
+    category: seo_marketing
+    description: Opening paragraph for SEO audit reports sent to prospects
+    variables: [company_name, score, top_issue]
+    template: |
+      Hi {company_name},
+
+      I ran a quick technical SEO audit on your website and found an overall score
+      of {score}/100. The most critical issue: {top_issue}.
+
+      Here's the full breakdown with prioritized fixes:
+
+  it_incident_summary:
+    id: it_incident_summary
+    category: it_ops
+    description: Leadership-ready incident summary template
+    variables: [date, system, severity, resolution]
+    template: |
+      IT Incident Summary — {date}
+
+      System Affected: {system}
+      Severity: {severity}
+      Status: Resolved
+
+      What happened: [Brief description]
+      Impact: [Who was affected and for how long]
+      Resolution: {resolution}
+      Prevention: [What will prevent recurrence]
+
+  daily_briefing_voice:
+    id: daily_briefing_voice
+    category: productivity
+    description: Short voice-ready morning briefing (for TTS)
+    variables: [date, mission_count, top_priority, approval_count]
+    template: |
+      Good morning. Today is {date}.
+      You have {mission_count} active missions.
+      Top priority: {top_priority}.
+      {approval_count} actions are waiting for your approval.
+      Have a focused day.
+
+  job_cover_letter:
+    id: job_cover_letter
+    category: job_acquisition
+    description: Cover letter template for IT/sysadmin roles
+    variables: [company_name, role, top_skill, achievement]
+    template: |
+      Dear Hiring Manager at {company_name},
+
+      I'm applying for the {role} position. With hands-on experience in {top_skill},
+      I've delivered results like: {achievement}.
+
+      I'm looking for a role where I can own infrastructure, solve real problems,
+      and grow with a strong team. I believe {company_name} is that place.
+
+      I'd love to connect. Available for a call anytime this week.
+
+  research_output:
+    id: research_output
+    category: research
+    description: Standard format for research agent outputs
+    variables: [query, source_count, key_finding]
+    template: |
+      Research: {query}
+      Sources analyzed: {source_count}
+
+      Key Finding: {key_finding}
+
+      Full breakdown below:
