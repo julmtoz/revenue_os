@@ -3,6 +3,8 @@
 A local, CLI-first operating system for a solo agency selling automation + lead-gen to home-service businesses.
 Three independent agents, one SQLite database, zero SaaS dependencies.
 
+Repository note: this directory is versioned independently from the parent OpenClaw workspace. Runtime state such as `.env`, SQLite databases, logs, exports, backups, virtualenvs, and `__pycache__` should stay untracked.
+
 ---
 
 ## Quick start

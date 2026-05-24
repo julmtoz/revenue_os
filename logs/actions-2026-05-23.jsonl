@@ -1,6 +1,0 @@
-{"agent": "executive_assistant", "action": "start", "metadata": {"mission_id": null, "kwargs": "{'task': 'briefing'}"}, "timestamp": "2026-05-23T23:58:21.733516+00:00"}
-{"agent": "executive_assistant", "action": "complete", "metadata": {"mission_id": null, "elapsed": 0.01, "success": true}, "timestamp": "2026-05-23T23:58:21.743791+00:00"}
-{"agent": "orchestrator", "action": "mission_created", "metadata": {"mission_id": 1, "title": "Research roofing leads in Newark", "department": "revenue"}, "timestamp": "2026-05-23T23:59:13.449849+00:00"}
-{"agent": "orchestrator", "action": "dispatched", "metadata": {"mission_id": 1, "department": "revenue", "agent": "lead_hunter", "dry_run": true}, "timestamp": "2026-05-23T23:59:13.455291+00:00"}
-{"agent": "it_guardian", "action": "start", "metadata": {"mission_id": null, "kwargs": "{'task': 'sop', 'topic': 'wifi issue'}"}, "timestamp": "2026-05-23T23:59:19.081440+00:00"}
-{"agent": "it_guardian", "action": "complete", "metadata": {"mission_id": null, "elapsed": 0.01, "success": true}, "timestamp": "2026-05-23T23:59:19.088283+00:00"}

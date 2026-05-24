@@ -1,0 +1,18 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Local runtime state
+data/*.db
+data/backups/
+exports/*.csv
+exports/audits/*.md
+logs/*.jsonl
+
+# Keep placeholder dirs committed
+!exports/.gitkeep
+!exports/audits/.gitkeep
+!logs/.gitkeep
