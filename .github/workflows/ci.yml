@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install pytest ruff
+
+      # Non-blocking for now: this codebase predates CI, so the first run
+      # would otherwise be solid red on pre-existing lint debt. Flip
+      # continue-on-error to false once the codebase is ruff-clean.
+      - name: Lint (ruff)
+        run: ruff check .
+        continue-on-error: true
+
+      # Verifies every module at least compiles/imports cleanly -- stands in
+      # for a "build" step; this repo isn't a packaged distributable.
+      - name: Compile check
+        run: python -m compileall -q .
+
+      # No tests/ directory exists yet in this repo. Exit code 5 from pytest
+      # means "no tests collected", which is treated as a pass so CI doesn't
+      # hard-fail before any tests are written -- any other failure (an
+      # actual test failure, an import error, etc.) still fails the build.
+      - name: Test (pytest)
+        run: |
+          set +e
+          pytest -q
+          code=$?
+          if [ "$code" -eq 5 ]; then
+            echo "No tests collected yet -- treating as pass."
+            exit 0
+          fi
+          exit "$code"
