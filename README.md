@@ -1,9 +1,48 @@
 # Revenue OS
 
-A local, CLI-first operating system for a solo agency selling automation + lead-gen to home-service businesses.
-Three independent agents, one SQLite database, zero SaaS dependencies.
+A local, CLI-first operating system for a solo agency selling automation and lead generation to home-service businesses. Revenue OS coordinates lead discovery, scoring, outreach drafting, and site audits through a small Python application with SQLite persistence and approval-gated workflows.
 
-Repository note: this directory is versioned independently from the parent OpenClaw workspace. Runtime state such as `.env`, SQLite databases, logs, exports, backups, virtualenvs, and `__pycache__` should stay untracked.
+## Recruiter summary
+
+Revenue OS demonstrates backend-oriented Python development, workflow orchestration, browser automation, relational data modeling, CLI design, scheduled jobs, structured logging, and safety controls around external actions.
+
+**Engineering focus:** Python, Typer, SQLite, SQL, Playwright, APScheduler, Streamlit, OpenAI API integration, deterministic mock mode, approval gates, dry-run controls, and operational logging.
+
+**Current status:** Working local system. It is intentionally designed as a local, operator-controlled tool rather than a hosted SaaS product. External sending, file deletion, website editing, and job-application actions are disabled by default.
+
+## What it does
+
+- Discovers and scores home-service business leads using Playwright and fallback geocoding
+- Stores leads, email drafts, audits, and operational logs in SQLite
+- Generates personalized outreach drafts for review
+- Produces website audit and opportunity memos
+- Exports leads and drafts for controlled review
+- Runs scheduled jobs with errors captured in logs
+- Provides a read-only Streamlit dashboard
+- Supports deterministic mock mode for safe local testing
+
+## Architecture
+
+- **CLI layer:** Typer commands for initialization, scraping, exports, drafting, audits, scheduling, and preflight checks
+- **Agent layer:** Lead hunting, outreach drafting, and audit-offer workflows
+- **Data layer:** SQLite schema and typed models for leads, email drafts, audits, and status transitions
+- **Operations layer:** APScheduler jobs, JSONL/SQLite logging, preflight checks, and safety controls
+- **Interface layer:** Read-only Streamlit dashboard plus optional Telegram command interface
+
+## Safety and configuration
+
+Copy `.env.example` to `.env` and provide local credentials. Secrets and runtime state are intentionally excluded from version control.
+
+The default configuration requires approval and dry-run behavior:
+
+- `DRY_RUN=true`
+- `APPROVAL_MODE=true`
+- `ALLOW_EXTERNAL_SEND=false`
+- `ALLOW_FILE_DELETE=false`
+- `ALLOW_WEBSITE_EDIT=false`
+- `ALLOW_JOB_APPLY=false`
+
+The project is designed to keep automation reviewable and operator-controlled.
 
 ---
 
@@ -32,37 +71,36 @@ python cli.py preflight
 ```
 
 `preflight` checks: database exists, export/log dirs created, OpenAI key present, Playwright detected.
+
 All green → you're ready to run the full pipeline.
 
 ---
 
 ## The full pipeline
 
-Run these in order on a fresh environment:
-
 ```bash
-# Step 1 — Hunt leads (Playwright → Google Maps, Nominatim fallback)
+# Step 1 — Hunt leads
 python cli.py scrape --city "Newark" --niche "roofing" --limit 25
 
 # Step 2 — Review what landed
 python cli.py export-leads
 
-# Step 3 — Generate outreach drafts (OpenAI)
+# Step 3 — Generate outreach drafts
 python cli.py generate-emails --limit 20 --status reviewed
 
 # Step 4 — Export drafts for review
 python cli.py export-emails
 
-# Step 5 — Produce an audit memo for a high-value lead
+# Step 5 — Produce an audit memo
 python cli.py audit --lead-id <id>
 
 # Step 6 — Launch the local dashboard
 python cli.py dashboard
 ```
 
-### Mock mode (no API key needed)
+### Mock mode
 
-Both `generate-emails` and `audit` support `--mock` for deterministic local output:
+Both `generate-emails` and `audit` support `--mock` for deterministic local output without an API key:
 
 ```bash
 python cli.py generate-emails --limit 5 --mock
@@ -74,58 +112,55 @@ python cli.py audit --lead-id 6 --mock
 ## CLI reference
 
 | Command | Key options | Description |
-|---------|-------------|-------------|
+|---|---|---|
 | `init-db` | — | Create SQLite tables |
-| `preflight` | — | Verify env is ready (DB, dirs, key, Playwright) |
-| `scrape` | `--city` `--niche` `--limit` | Lead Hunter: Playwright scrape → Nominatim → stub fallback |
-| `export-leads` | `--status` | Dump leads table → `exports/leads-*.csv` |
-| `generate-emails` | `--limit` `--status` `--mock` | Outreach agent: OpenAI email drafts |
-| `export-emails` | `--status` | Dump emails table → `exports/emails-*.csv` |
-| `audit` | `--lead-id` `--mock` | Audit agent: fetch site + OpenAI opportunity memo |
-| `schedule` | — | Start APScheduler (scrape 8am/2pm, emails 9am) |
-| `dashboard` | `--port` | Local read-only Streamlit command center |
+| `preflight` | — | Verify environment readiness |
+| `scrape` | `--city` `--niche` `--limit` | Discover and score leads |
+| `export-leads` | `--status` | Export leads to CSV |
+| `generate-emails` | `--limit` `--status` `--mock` | Draft outreach emails |
+| `export-emails` | `--status` | Export drafts to CSV |
+| `audit` | `--lead-id` `--mock` | Generate an audit memo |
+| `schedule` | — | Start scheduled jobs |
+| `dashboard` | `--port` | Launch the read-only dashboard |
 
 ---
 
 ## Lead statuses
 
-Leads move through a ranked pipeline. Higher rank = further along:
+Leads move through a ranked pipeline:
 
 | Status | Meaning |
-|--------|---------|
+|---|---|
 | `new` | Just scraped, not yet reviewed |
-| `qualified` | Score ≥ 7.0, reliable contact info |
-| `reviewed` | Score 5–7, or thin contact — needs manual check |
+| `qualified` | Score ≥ 7.0 with reliable contact information |
+| `reviewed` | Needs manual review |
 | `stub` | Fallback placeholder, never contact |
 | `emailed` | Outreach sent |
 | `replied` | Lead responded |
-| `interested` | Expressed interest |
+| `interested` | Lead expressed interest |
 | `audit_ready` | Audit memo generated |
 | `closed_won` | Deal closed |
-| `closed_lost` | Not converting |
+| `closed_lost` | Deal did not convert |
 
-**Scoring** is weighted across: website presence, phone validity, niche match, city match, source trust.
-Nominatim leads carry a −1.0 trust penalty. Fallback stubs carry −8.0 and are permanently excluded from outreach.
+Scoring considers website presence, phone validity, niche match, city match, and source trust. Fallback stubs are automatically excluded from outreach.
 
 ---
 
 ## Email sendability labels
 
-Every draft gets one of three labels:
-
 | Label | Meaning |
-|-------|---------|
-| `sendable` | High personalization + score ≥ 7 + valid contact → ready to review and send |
-| `needs_edit` | Some signals missing — review before sending |
-| `do_not_send` | Stub lead, or no valid contact path — do not send |
+|---|---|
+| `sendable` | High personalization and a valid contact path; ready for review |
+| `needs_edit` | Some signals are missing; manual editing required |
+| `do_not_send` | Stub lead or no valid contact path |
 
 ---
 
 ## Scrape fallback chain
 
-1. **Playwright + Google Maps** — primary source, real business cards with phone numbers
-2. **Nominatim (OpenStreetMap)** — fires if Playwright returns nothing; thin coverage for home-service niches
-3. **Fallback stubs** — placeholder rows (`source=fallback_stub`) when both above return nothing; excluded from all outreach automatically
+1. Playwright + Google Maps
+2. Nominatim / OpenStreetMap fallback
+3. Fallback stubs excluded from outreach
 
 ---
 
@@ -137,10 +172,11 @@ python cli.py schedule
 ```
 
 Jobs:
-- **8:00am + 2:00pm** — `lead_scrape`: scrapes `DEFAULT_CITY` / `DEFAULT_NICHE` for 25 leads
-- **9:00am** — `generate_emails`: drafts up to `DAILY_OUTREACH_CAP` emails for workable leads
 
-Job errors are caught and logged to the `logs` SQLite table — the scheduler stays running even if a job fails.
+- **8:00am and 2:00pm** — scrape the configured city and niche
+- **9:00am** — draft outreach for workable leads
+
+Job errors are caught and logged so the scheduler can continue running.
 
 ---
 
@@ -148,23 +184,14 @@ Job errors are caught and logged to the `logs` SQLite table — the scheduler st
 
 ```
 revenue_os/
-├── agents/
-│   ├── lead_hunter/      # Playwright scrape + Nominatim fallback + scoring
-│   ├── outreach/         # OpenAI email draft generation
-│   └── audit_offer/      # Site fetch + OpenAI opportunity memos
-├── core/
-│   ├── config.py         # Settings dataclass, env vars, scoring weights
-│   ├── db.py             # SQLite schema + upsert helpers
-│   ├── logger.py         # JSONL + SQLite logging
-│   ├── models.py         # Lead, EmailDraft, Audit dataclasses + status rank
-│   └── scheduler.py      # APScheduler job wiring
-├── prompts/              # Jinja2 templates for outreach + audit
-├── data/                 # SQLite DB (revenue_os.db)
-├── exports/              # CSV dumps + audit markdown files
-│   └── audits/           # lead-{id}.md opportunity memos
-├── logs/                 # JSONL action logs (actions-YYYY-MM-DD.jsonl)
-├── cli.py                # Typer CLI entrypoint
-├── dashboard.py          # Streamlit read-only command center
+├── agents/              # Lead hunter, outreach, and audit workflows
+├── core/                # Configuration, database, models, logging, scheduler
+├── prompts/             # Jinja2 templates for outreach and audits
+├── data/                # Local SQLite database, ignored by Git
+├── exports/             # CSV exports and audit memos, ignored by Git
+├── logs/                # JSONL operational logs, ignored by Git
+├── cli.py               # Typer CLI entrypoint
+├── dashboard.py         # Streamlit read-only command center
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -172,34 +199,11 @@ revenue_os/
 
 ---
 
-## Configuration (.env)
+## Roadmap
 
-```bash
-OPENAI_API_KEY=sk-...          # Required for generate-emails and audit
-DEFAULT_CITY=Newark            # Default scrape target
-DEFAULT_NICHE=roofing          # Default scrape niche
-OPENAI_MODEL_EMAIL=gpt-4.1-mini
-OPENAI_MODEL_AUDIT=gpt-4.1-mini
-OPENAI_MODEL_SCORING=gpt-4o-mini
-DAILY_OUTREACH_CAP=25          # Max drafts per scheduler run
-
-# Scoring weight overrides (optional)
-WEIGHT_HAS_WEBSITE=1
-WEIGHT_MISSING_WEBSITE=-2
-WEIGHT_HAS_PHONE=1
-WEIGHT_VALID_PHONE=1.5
-WEIGHT_NICHE_MATCH=2
-WEIGHT_CITY_MATCH=2
-WEIGHT_STUB_PENALTY=-8
-```
-
----
-
-## Post-v1 ideas
-
-- Enrich leads with PageSpeed scores, Hunter email lookup
-- Wire Gmail/Instantly for controlled sending (with `sendable` guard)
-- Add Telegram/Slack webhook for scheduler alerts
-- Containerize for VPS once ROI is validated
+- Add PageSpeed and email-enrichment integrations
+- Add controlled Gmail or webhook delivery behind explicit approval
+- Containerize for a VPS deployment after ROI validation
+- Add a small test suite around scoring, status transitions, and safety controls
 
 Keep it local, lean, and revenue-focused.
