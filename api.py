@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from agents.audit_offer.audit import generate_audit
 from agents.lead_hunter.lead_hunter import scrape_and_store
 from agents.outreach.generator import generate_email_drafts
+from agents.research.research_agent import ResearchAgent
 from core.config import get_settings
 from core.db import ensure_db_ready, get_session
 from orchestrator.approval_manager import ApprovalManager
@@ -39,6 +40,7 @@ app = FastAPI(
 orchestrator = SupremeOrchestrator()
 missions = MissionManager()
 approvals = ApprovalManager()
+research = ResearchAgent()
 
 
 def require_api_key(x_dge_api_key: Optional[str] = Header(default=None)) -> None:
@@ -71,6 +73,10 @@ class DraftRequest(BaseModel):
 class AuditRequest(BaseModel):
     lead_id: int = Field(gt=0)
     mock: bool = False
+
+
+class ResearchRequest(BaseModel):
+    query: str = Field(min_length=3, max_length=500)
 
 
 class ApprovalDecision(BaseModel):
@@ -115,6 +121,19 @@ def get_mission(mission_id: int) -> dict[str, Any]:
     if not row:
         raise HTTPException(status_code=404, detail="Mission not found")
     return dict(row)
+
+
+@app.post("/v1/research", dependencies=[Depends(require_api_key)])
+def run_research(payload: ResearchRequest) -> dict[str, Any]:
+    result = research.execute(query=payload.query)
+    if not result.success:
+        raise HTTPException(status_code=502, detail=result.output)
+    return {
+        "query": payload.query,
+        "summary": result.output,
+        "results": result.data or [],
+        "next_action": result.next_action,
+    }
 
 
 @app.get("/v1/leads", dependencies=[Depends(require_api_key)])
