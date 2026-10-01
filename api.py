@@ -148,6 +148,44 @@ def hunt_leads(payload: LeadHuntRequest) -> dict[str, Any]:
     }
 
 
+@app.get("/v1/outreach/drafts", dependencies=[Depends(require_api_key)])
+def list_drafts(
+    sendability: Optional[str] = None,
+    require_email: bool = False,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> dict[str, Any]:
+    query = """
+        SELECT
+            emails.id,
+            emails.lead_id,
+            emails.subject,
+            emails.body,
+            emails.status,
+            emails.sendability,
+            emails.notes,
+            emails.created_at,
+            leads.name AS lead_name,
+            leads.email AS lead_email,
+            leads.website AS lead_website,
+            leads.city AS lead_city,
+            leads.category AS lead_category
+        FROM emails
+        JOIN leads ON leads.id = emails.lead_id
+        WHERE emails.status = 'draft'
+    """
+    params: list[Any] = []
+    if sendability:
+        query += " AND emails.sendability = ?"
+        params.append(sendability)
+    if require_email:
+        query += " AND leads.email IS NOT NULL AND TRIM(leads.email) != ''"
+    query += " ORDER BY emails.created_at DESC LIMIT ?"
+    params.append(limit)
+    with get_session() as conn:
+        rows = conn.execute(query, params).fetchall()
+    return {"drafts": [dict(row) for row in rows], "count": len(rows)}
+
+
 @app.post("/v1/outreach/drafts", dependencies=[Depends(require_api_key)])
 def create_drafts(payload: DraftRequest) -> dict[str, Any]:
     settings = get_settings()
