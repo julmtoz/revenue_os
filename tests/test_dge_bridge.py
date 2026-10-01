@@ -33,5 +33,5 @@ def test_dge01_workflow_is_importable_json_and_draft_only():
     assert "Read Approval Queue" in node_names
 
     draft_node = next(node for node in data["nodes"] if node["name"] == "Create Safe Drafts")
-    assert '"mock":true' in draft_node["parameters"]["body"].replace(" ", "")
+    assert "mock:true" in draft_node["parameters"]["body"].replace(" ", "")
     assert all("/send" not in str(node.get("parameters", {})).lower() for node in data["nodes"])
