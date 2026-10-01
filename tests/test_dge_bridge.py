@@ -11,6 +11,7 @@ def test_bridge_exposes_safe_v1_surface():
         "/v1/summary",
         "/v1/missions",
         "/v1/missions/{mission_id}",
+        "/v1/research",
         "/v1/leads",
         "/v1/leads/hunt",
         "/v1/outreach/drafts",
@@ -35,3 +36,16 @@ def test_dge01_workflow_is_importable_json_and_draft_only():
     draft_node = next(node for node in data["nodes"] if node["name"] == "Create Safe Drafts")
     assert "mock:true" in draft_node["parameters"]["body"].replace(" ", "")
     assert all("/send" not in str(node.get("parameters", {})).lower() for node in data["nodes"])
+
+
+def test_all_dge_workflows_are_valid_json():
+    workflow_dir = Path("n8n/workflows")
+    files = sorted(workflow_dir.glob("dge-*.json"))
+    assert len(files) >= 3
+
+    for path in files:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        assert data["name"].startswith("DGE-")
+        assert data["active"] is False
+        assert data["nodes"]
+        assert data["connections"]
