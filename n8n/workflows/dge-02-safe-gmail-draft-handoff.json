@@ -1,0 +1,190 @@
+{
+  "name": "DGE-02 Safe Gmail Draft Handoff",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "base_url",
+              "value": "http://host.docker.internal:8787"
+            },
+            {
+              "name": "api_key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ],
+          "number": [
+            {
+              "name": "limit",
+              "value": 10
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "DGE Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.base_url + '/v1/outreach/drafts?sendability=sendable&require_email=true&limit=' + $json.limit }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $json.api_key }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3",
+      "name": "Read Sendable Drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "drafts",
+        "options": {}
+      },
+      "id": "4",
+      "name": "Split Drafts",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        40,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ $json.body.replace(/\\n/g, '<br />\\n') }}",
+        "options": {
+          "sendTo": "={{ $json.lead_email }}"
+        },
+        "subject": "={{ $json.subject }}",
+        "resource": "draft",
+        "emailType": "html"
+      },
+      "id": "5",
+      "name": "Gmail - Create Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        260,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "Draft created in Gmail for human review"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6",
+      "name": "Human Review Required",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "DGE Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DGE Config": {
+      "main": [
+        [
+          {
+            "node": "Read Sendable Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Sendable Drafts": {
+      "main": [
+        [
+          {
+            "node": "Split Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Drafts": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Create Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Create Draft": {
+      "main": [
+        [
+          {
+            "node": "Human Review Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
