@@ -1,0 +1,187 @@
+{
+  "name": "DGE-03 Demand Scout V0",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "base_url",
+              "value": "http://host.docker.internal:8787"
+            },
+            {
+              "name": "api_key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "DGE Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $input.first().json;\nconst niches = ['roofing','HVAC','plumbing','med spa','dentist','personal injury law','home remodeling','auto repair','property management','commercial cleaning'];\nconst signals = [\n  'businesses spending on lead generation digital marketing ads',\n  'hiring marketing sales lead generation automation',\n  'agencies serving this niche lead generation marketing automation'\n];\nreturn niches.flatMap(niche => signals.map(signal => ({json:{base_url:cfg.base_url,api_key:cfg.api_key,niche,query:`DGE_NICHE=${niche} | US ${niche} ${signal}`}})));"
+      },
+      "id": "3",
+      "name": "Generate Demand Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -300,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.base_url + '/v1/research' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({query:$json.query}) }}",
+        "options": {}
+      },
+      "id": "4",
+      "name": "Collect Evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -60,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const groups = {};\nfor (const item of $input.all()) {\n  const q = item.json.query || '';\n  const m = q.match(/^DGE_NICHE=([^|]+)\\s*\\|/);\n  const niche = m ? m[1].trim() : 'unknown';\n  const results = Array.isArray(item.json.results) ? item.json.results : [];\n  if (!groups[niche]) groups[niche] = {niche,evidence_count:0,source_urls:new Set(),summaries:[]};\n  groups[niche].evidence_count += results.length;\n  for (const r of results) if (r.url) groups[niche].source_urls.add(r.url);\n  if (item.json.summary) groups[niche].summaries.push(item.json.summary);\n}\nreturn Object.values(groups)\n  .map(g=>({json:{niche:g.niche,evidence_count:g.evidence_count,source_count:g.source_urls.size,source_urls:[...g.source_urls].slice(0,12),evidence:g.summaries.slice(0,3)}}))\n  .sort((a,b)=>(b.json.source_count+b.json.evidence_count)-(a.json.source_count+a.json.evidence_count))\n  .slice(0,5);"
+      },
+      "id": "5",
+      "name": "Build Top 5 Evidence Shortlist",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        180,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "decision_status",
+              "value": "HUMAN_REVIEW"
+            }
+          ]
+        },
+        "options": {
+          "includeOtherFields": true
+        }
+      },
+      "id": "6",
+      "name": "Human Decision Gate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        420,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "DGE Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DGE Config": {
+      "main": [
+        [
+          {
+            "node": "Generate Demand Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Demand Queries": {
+      "main": [
+        [
+          {
+            "node": "Collect Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Evidence": {
+      "main": [
+        [
+          {
+            "node": "Build Top 5 Evidence Shortlist",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Top 5 Evidence Shortlist": {
+      "main": [
+        [
+          {
+            "node": "Human Decision Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
