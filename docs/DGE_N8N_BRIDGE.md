@@ -30,9 +30,11 @@ Set `DGE_API_KEY` in Revenue OS and send the same value as the `X-DGE-API-Key` h
 | GET | `/v1/summary` | Revenue OS daily summary |
 | POST | `/v1/missions` | Queue a mission |
 | GET | `/v1/missions/{id}` | Read mission state |
+| POST | `/v1/research` | Run bounded web research through the existing research agent |
 | GET | `/v1/leads` | List scored leads |
 | POST | `/v1/leads/hunt` | Run bounded lead discovery |
 | POST | `/v1/audits` | Build an opportunity audit |
+| GET | `/v1/outreach/drafts` | Read the reviewable draft queue |
 | POST | `/v1/outreach/drafts` | Create drafts only |
 | GET | `/v1/approvals` | Read pending approvals |
 | POST | `/v1/approvals/{id}/decision` | Approve/reject a queued action |
@@ -86,3 +88,18 @@ We are adopting proven patterns rather than copying whole third-party systems:
 - structured webhook responses
 
 These map cleanly onto Revenue OS's existing mission, approval, lead, audit, and draft objects.
+
+
+## DGE-02: safe Gmail draft handoff
+
+Import `n8n/workflows/dge-02-safe-gmail-draft-handoff.json`.
+
+This workflow only selects drafts that Revenue OS has marked `sendable` **and** that have a real lead email, then creates a Gmail draft. It does not send the message. Gmail remains the human review surface.
+
+## DGE-03: Demand Scout V0
+
+Import `n8n/workflows/dge-03-demand-scout-v0.json`.
+
+The workflow expands a starter set of service-business niches across three evidence queries per niche, calls the Revenue OS research agent, aggregates source/evidence counts, returns a five-market evidence shortlist, and marks the output `HUMAN_REVIEW`.
+
+V0 is intentionally evidence-first, not a final market-selection model. The next upgrade adds stronger paid-demand sources (SEO/traffic/ad intelligence) and persistence for market/evidence records.
