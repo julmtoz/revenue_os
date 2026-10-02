@@ -1,0 +1,369 @@
+{
+  "name": "DGE-01 Lead Research to Draft Queue",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "base_url",
+              "value": "http://host.docker.internal:8787"
+            },
+            {
+              "name": "api_key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            },
+            {
+              "name": "city",
+              "value": "={{ String($json.body?.city ?? 'Newark').trim() }}"
+            },
+            {
+              "name": "niche",
+              "value": "={{ String($json.body?.niche ?? 'roofing').trim() }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "limit",
+              "value": "={{ Math.max(1, Math.min(50, Math.floor(Number($json.body?.limit) || 10))) }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "mock",
+              "value": "={{ $json.body?.mock !== false }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2",
+      "name": "DGE Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -540,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.base_url + '/health' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $json.api_key }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "3",
+      "name": "Health Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('DGE Config').item.json.base_url + '/v1/leads/hunt' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $('DGE Config').item.json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({city: $('DGE Config').first().json.city, niche: $('DGE Config').first().json.niche, limit: $('DGE Config').first().json.limit, mock: $('DGE Config').first().json.mock}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "4",
+      "name": "Hunt Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('DGE Config').item.json.base_url + '/v1/leads?status=qualified&limit=' + $('DGE Config').item.json.limit }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $('DGE Config').item.json.api_key }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "5",
+      "name": "Read Qualified Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('DGE Config').item.json.base_url + '/v1/outreach/drafts' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $('DGE Config').item.json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({limit: $('DGE Config').first().json.limit, status: 'qualified', mock: true, lead_ids: $('Hunt Leads').first().json.lead_ids}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "6",
+      "name": "Create Safe Drafts",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('DGE Config').item.json.base_url + '/v1/approvals' }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "={{ $('DGE Config').item.json.api_key }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "7",
+      "name": "Read Approval Queue",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "status",
+              "value": "DGE-01 completed"
+            },
+            {
+              "name": "decision_status",
+              "value": "HUMAN_REVIEW"
+            }
+          ],
+          "number": [
+            {
+              "name": "approvals_waiting",
+              "value": "={{ $json.count || 0 }}"
+            },
+            {
+              "name": "leads_found",
+              "value": "={{ $('Hunt Leads').first().json.count }}"
+            },
+            {
+              "name": "drafts_created",
+              "value": "={{ $('Create Safe Drafts').first().json.created }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "external_send_performed",
+              "value": false
+            }
+          ]
+        },
+        "keepOnlySet": true,
+        "options": {}
+      },
+      "id": "8",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        780,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dge/lead-research",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "dge01-webhook",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        180
+      ],
+      "webhookId": "dge01-webhook-webhook"
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "DGE Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DGE Config": {
+      "main": [
+        [
+          {
+            "node": "Health Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check": {
+      "main": [
+        [
+          {
+            "node": "Hunt Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hunt Leads": {
+      "main": [
+        [
+          {
+            "node": "Read Qualified Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Qualified Leads": {
+      "main": [
+        [
+          {
+            "node": "Create Safe Drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Safe Drafts": {
+      "main": [
+        [
+          {
+            "node": "Read Approval Queue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Approval Queue": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Intake": {
+      "main": [
+        [
+          {
+            "node": "DGE Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": [],
+  "id": "dgeLeadResearchToDrafts01"
+}

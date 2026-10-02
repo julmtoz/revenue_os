@@ -1,0 +1,236 @@
+{
+  "name": "DGE-03 Demand Scout V1",
+  "id": "dgeDemandScout03",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dge/demand-scout",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "dge03-webhook",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -360,
+        0
+      ],
+      "webhookId": "dge03-demand-scout-webhook"
+    },
+    {
+      "name": "Generate Demand Queries",
+      "id": "generate-demand-queries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/market-intelligence/scout/queries",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({niches: $json.body?.niches || []}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "name": "Split Queries",
+      "id": "split-queries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        100,
+        0
+      ],
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      }
+    },
+    {
+      "name": "Collect Evidence",
+      "id": "collect-evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/research",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({query: $json.query, context: $json.context}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "name": "Aggregate Evidence",
+      "id": "aggregate-evidence",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        540,
+        0
+      ],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "items",
+        "options": {}
+      }
+    },
+    {
+      "name": "Persist and Score Markets",
+      "id": "persist-and-score-markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/market-intelligence/evidence/batch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({items: $json.items.map(r => ({niche:r.context.niche, signal_type:r.context.signal_type, query:r.query, summary:r.summary, results:r.results, success:r.success}))}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "dge03-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        980,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Intake": {
+      "main": [
+        [
+          {
+            "node": "Generate Demand Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Demand Queries": {
+      "main": [
+        [
+          {
+            "node": "Split Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Queries": {
+      "main": [
+        [
+          {
+            "node": "Collect Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Evidence": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Evidence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Evidence": {
+      "main": [
+        [
+          {
+            "node": "Persist and Score Markets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Persist and Score Markets": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "pinData": null,
+  "tags": []
+}

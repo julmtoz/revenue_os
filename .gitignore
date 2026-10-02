@@ -4,6 +4,14 @@
 __pycache__/
 **/__pycache__/
 *.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+/dge03-state.json
+/scripts/local-debug/
+/data/dge-runtime/
 
 # Local runtime state
 data/*.db
