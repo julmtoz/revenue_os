@@ -1,11 +1,11 @@
 """Database helpers for revenue_os."""
 from __future__ import annotations
 
-import json
 import sqlite3
+from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from typing import Any, Generator, Mapping, Optional
+from typing import Any
 
 from .config import get_settings
 
@@ -104,6 +104,33 @@ SCHEMA_STATEMENTS = [
         UNIQUE(namespace, key)
     );
     """,
+    """
+    CREATE TABLE IF NOT EXISTS markets (
+        id INTEGER PRIMARY KEY,
+        niche TEXT NOT NULL UNIQUE,
+        status TEXT DEFAULT 'researching',
+        notes TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS market_evidence (
+        id INTEGER PRIMARY KEY,
+        market_id INTEGER NOT NULL,
+        signal_type TEXT NOT NULL,
+        query TEXT NOT NULL,
+        source_url TEXT NOT NULL DEFAULT '',
+        source_title TEXT,
+        source_description TEXT,
+        summary TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (market_id) REFERENCES markets(id),
+        UNIQUE(market_id, signal_type, query, source_url)
+    );
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_market_evidence_market_id ON market_evidence(market_id);",
+    "CREATE INDEX IF NOT EXISTS idx_market_evidence_signal_type ON market_evidence(signal_type);",
 ]
 
 
@@ -185,8 +212,8 @@ def create_mission(
     conn: sqlite3.Connection,
     title: str,
     department: str,
-    agent: Optional[str] = None,
-    input_data: Optional[str] = None,
+    agent: str | None = None,
+    input_data: str | None = None,
     approval_required: bool = False,
     priority: int = 5,
 ) -> int:
@@ -211,15 +238,15 @@ def update_mission(conn: sqlite3.Connection, mission_id: int, **kwargs: Any) -> 
     conn.execute(f"UPDATE missions SET {set_clause} WHERE id = ?", values)
 
 
-def get_mission(conn: sqlite3.Connection, mission_id: int) -> Optional[sqlite3.Row]:
+def get_mission(conn: sqlite3.Connection, mission_id: int) -> sqlite3.Row | None:
     """Return a single mission row or None."""
     return conn.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
 
 
 def list_missions(
     conn: sqlite3.Connection,
-    status: Optional[str] = None,
-    department: Optional[str] = None,
+    status: str | None = None,
+    department: str | None = None,
 ) -> list:
     """Return missions filtered by optional status and/or department."""
     query = "SELECT * FROM missions WHERE 1=1"
@@ -240,9 +267,9 @@ def list_missions(
 
 def create_approval(
     conn: sqlite3.Connection,
-    mission_id: Optional[int],
+    mission_id: int | None,
     action: str,
-    payload: Optional[str] = None,
+    payload: str | None = None,
 ) -> int:
     """Insert a new approval request and return its id."""
     cursor = conn.execute(
@@ -256,7 +283,7 @@ def resolve_approval(
     conn: sqlite3.Connection,
     approval_id: int,
     approved: bool,
-    reason: Optional[str] = None,
+    reason: str | None = None,
 ) -> None:
     """Mark an approval as approved or rejected."""
     status = "approved" if approved else "rejected"
@@ -291,7 +318,7 @@ def memory_set(conn: sqlite3.Connection, namespace: str, key: str, value: str) -
     )
 
 
-def memory_get(conn: sqlite3.Connection, namespace: str, key: str) -> Optional[str]:
+def memory_get(conn: sqlite3.Connection, namespace: str, key: str) -> str | None:
     """Retrieve a value from the memory table, or None if not found."""
     row = conn.execute(
         "SELECT value FROM memory WHERE namespace = ? AND key = ?",

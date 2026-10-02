@@ -31,6 +31,9 @@ Set `DGE_API_KEY` in Revenue OS and send the same value as the `X-DGE-API-Key` h
 | POST | `/v1/missions` | Queue a mission |
 | GET | `/v1/missions/{id}` | Read mission state |
 | POST | `/v1/research` | Run bounded web research through the existing research agent |
+| POST | `/v1/market-intelligence/evidence/batch` | Persist a batch of market evidence and return a scored shortlist |
+| GET | `/v1/market-intelligence/shortlist` | Read the current evidence-ranked market shortlist |
+| GET | `/v1/market-intelligence/evidence` | Inspect stored evidence for one niche |
 | GET | `/v1/leads` | List scored leads |
 | POST | `/v1/leads/hunt` | Run bounded lead discovery |
 | POST | `/v1/audits` | Build an opportunity audit |
@@ -100,6 +103,6 @@ This workflow only selects drafts that Revenue OS has marked `sendable` **and** 
 
 Import `n8n/workflows/dge-03-demand-scout-v0.json`.
 
-The workflow expands a starter set of service-business niches across three evidence queries per niche, calls the Revenue OS research agent, aggregates source/evidence counts, returns a five-market evidence shortlist, and marks the output `HUMAN_REVIEW`.
+The workflow expands a starter set of service-business niches across three evidence classes per niche—demand/spend, hiring, and competition—calls the Revenue OS research agent, persists the evidence in SQLite, computes source/evidence/signal-diversity scores, returns a five-market shortlist, and marks the output `HUMAN_REVIEW`.
 
-V0 is intentionally evidence-first, not a final market-selection model. The next upgrade adds stronger paid-demand sources (SEO/traffic/ad intelligence) and persistence for market/evidence records.
+V0 is intentionally evidence-first, not a final market-selection model. Evidence persistence and deterministic scoring are now built in. The next upgrade is to enrich the same evidence store with stronger paid-demand sources such as SEO, traffic, and ad intelligence.

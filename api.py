@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from agents.outreach.generator import generate_email_drafts
 from agents.research.research_agent import ResearchAgent
 from core.config import get_settings
 from core.db import ensure_db_ready, get_session
+from market_api import router as market_router
 from orchestrator.approval_manager import ApprovalManager
 from orchestrator.mission_manager import MissionManager
 from orchestrator.supreme_orchestrator import SupremeOrchestrator
@@ -36,6 +37,7 @@ app = FastAPI(
     description="Stable local API boundary for n8n and Project 5 orchestration.",
     lifespan=lifespan,
 )
+app.router.routes.extend(market_router.routes)
 
 orchestrator = SupremeOrchestrator()
 missions = MissionManager()
@@ -43,7 +45,7 @@ approvals = ApprovalManager()
 research = ResearchAgent()
 
 
-def require_api_key(x_dge_api_key: Optional[str] = Header(default=None)) -> None:
+def require_api_key(x_dge_api_key: str | None = Header(default=None)) -> None:
     """Validate the shared bridge key when one is configured."""
     expected = os.getenv("DGE_API_KEY")
     if expected and x_dge_api_key != expected:
@@ -52,10 +54,10 @@ def require_api_key(x_dge_api_key: Optional[str] = Header(default=None)) -> None
 
 class MissionCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
-    department: Optional[str] = None
-    input_data: Optional[dict[str, Any]] = None
+    department: str | None = None
+    input_data: dict[str, Any] | None = None
     priority: int = Field(default=5, ge=1, le=10)
-    approval_required: Optional[bool] = None
+    approval_required: bool | None = None
 
 
 class LeadHuntRequest(BaseModel):
@@ -81,7 +83,7 @@ class ResearchRequest(BaseModel):
 
 class ApprovalDecision(BaseModel):
     approved: bool
-    reason: Optional[str] = Field(default=None, max_length=1000)
+    reason: str | None = Field(default=None, max_length=1000)
 
 
 @app.get("/health", dependencies=[Depends(require_api_key)])
@@ -138,7 +140,7 @@ def run_research(payload: ResearchRequest) -> dict[str, Any]:
 
 @app.get("/v1/leads", dependencies=[Depends(require_api_key)])
 def list_leads(
-    status: Optional[str] = None,
+    status: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:
     query = "SELECT * FROM leads"
@@ -169,7 +171,7 @@ def hunt_leads(payload: LeadHuntRequest) -> dict[str, Any]:
 
 @app.get("/v1/outreach/drafts", dependencies=[Depends(require_api_key)])
 def list_drafts(
-    sendability: Optional[str] = None,
+    sendability: str | None = None,
     require_email: bool = False,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> dict[str, Any]:

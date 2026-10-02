@@ -10,13 +10,16 @@ from api import app
 
 
 def test_bridge_exposes_safe_v1_surface():
-    paths = {route.path for route in app.routes}
+    paths = {route.path for route in app.routes if getattr(route, "path", None)}
     expected = {
         "/health",
         "/v1/summary",
         "/v1/missions",
         "/v1/missions/{mission_id}",
         "/v1/research",
+        "/v1/market-intelligence/evidence/batch",
+        "/v1/market-intelligence/shortlist",
+        "/v1/market-intelligence/evidence",
         "/v1/leads",
         "/v1/leads/hunt",
         "/v1/outreach/drafts",
@@ -54,3 +57,24 @@ def test_all_dge_workflows_are_valid_json():
         assert data["active"] is False
         assert data["nodes"]
         assert data["connections"]
+
+
+
+def test_dge03_persists_and_scores_market_evidence():
+    path = Path("n8n/workflows/dge-03-demand-scout-v0.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    node_names = {node["name"] for node in data["nodes"]}
+
+    assert "Build Evidence Batch" in node_names
+    assert "Persist and Score Markets" in node_names
+    assert "Expand Top 5" in node_names
+
+    persist = next(node for node in data["nodes"] if node["name"] == "Persist and Score Markets")
+    assert "/v1/market-intelligence/evidence/batch" in persist["parameters"]["url"]
+
+    generator = next(node for node in data["nodes"] if node["name"] == "Generate Demand Queries")
+    code = generator["parameters"]["jsCode"]
+    assert "DGE_SIGNAL=" in code
+    assert "demand_spend" in code
+    assert "hiring" in code
+    assert "competition" in code
