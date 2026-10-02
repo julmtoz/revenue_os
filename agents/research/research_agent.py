@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+import os
+from typing import Any
 
 import httpx
+from bs4 import BeautifulSoup
 
-from agents.base_agent import BaseAgent, AgentResult
-from core.db import get_session, memory_set, memory_get
+from agents.base_agent import AgentResult, BaseAgent
+from core.db import get_session, memory_get, memory_set
 from core.logger import log_action
 
 
@@ -18,7 +20,7 @@ class ResearchAgent(BaseAgent):
 
     def execute(
         self,
-        mission_id: Optional[int] = None,
+        mission_id: int | None = None,
         query: str = "",
         **kwargs: Any,
     ) -> AgentResult:
@@ -26,19 +28,25 @@ class ResearchAgent(BaseAgent):
             return AgentResult(success=False, output="No query provided.")
 
         # Check memory cache first
-        cache_key = query.lower().strip()[:100]
+        cache_key = query.lower().strip()
         with get_session() as conn:
             cached = memory_get(conn, "research_cache", cache_key)
         if cached:
+            payload = json.loads(cached)
             return AgentResult(
                 success=True,
-                output=f"[CACHED] {cached}",
-                data=json.loads(cached),
+                output=f"[CACHED] {payload.get('summary', '')}",
+                data=payload.get("results", []),
+                next_action="Review findings and decide next step",
             )
 
         results = self._brave_search(query)
         if not results:
+            results = self._searxng_search(query)
+        if not results:
             results = self._ddg_search(query)
+        if not results:
+            results = self._bing_search(query)
 
         if not results:
             return AgentResult(
@@ -53,7 +61,7 @@ class ResearchAgent(BaseAgent):
                 conn,
                 "research_cache",
                 cache_key,
-                json.dumps({"query": query, "summary": summary, "results": results[:5]}),
+                json.dumps({"query": query, "summary": summary, "results": results}),
             )
 
         log_action(self.name, "research_complete", {"query": query, "result_count": len(results)})
@@ -88,8 +96,38 @@ class ResearchAgent(BaseAgent):
                 }
                 for r in data.get("web", {}).get("results", [])
             ]
-        except Exception as exc:
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
             log_action(self.name, "brave_search_error", {"error": str(exc)})
+            return []
+
+    def _searxng_search(self, query: str) -> list[dict]:
+        """Local, free metasearch fallback exposed by the n8n Docker stack."""
+        base_url = os.getenv("SEARXNG_URL", "http://127.0.0.1:8081").rstrip("/")
+        try:
+            resp = httpx.get(
+                f"{base_url}/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "language": "en",
+                    "safesearch": 0,
+                },
+                timeout=20,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            results: list[dict] = []
+            for item in data.get("results", [])[:10]:
+                results.append(
+                    {
+                        "title": item.get("title"),
+                        "url": item.get("url"),
+                        "description": item.get("content", ""),
+                    }
+                )
+            return results
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            log_action(self.name, "searxng_search_error", {"error": str(exc)})
             return []
 
     def _ddg_search(self, query: str) -> list[dict]:
@@ -120,7 +158,42 @@ class ResearchAgent(BaseAgent):
                         }
                     )
             return results
-        except Exception:
+        except (httpx.HTTPError, ValueError, TypeError):
+            return []
+
+    def _bing_search(self, query: str) -> list[dict]:
+        """Free HTML search fallback when API-backed search is unavailable."""
+        try:
+            resp = httpx.get(
+                "https://www.bing.com/search",
+                params={"q": query, "count": 10},
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 Chrome/155.0.0.0 Safari/537.36"
+                    )
+                },
+                timeout=15,
+                follow_redirects=True,
+            )
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            results: list[dict] = []
+            for item in soup.select("li.b_algo")[:10]:
+                link = item.select_one("h2 a")
+                if not link:
+                    continue
+                snippet = item.select_one(".b_caption p")
+                results.append(
+                    {
+                        "title": link.get_text(" ", strip=True),
+                        "url": link.get("href", ""),
+                        "description": snippet.get_text(" ", strip=True) if snippet else "",
+                    }
+                )
+            return results
+        except (httpx.HTTPError, ValueError, TypeError) as exc:
+            log_action(self.name, "bing_search_error", {"error": str(exc)})
             return []
 
     def _summarize(self, query: str, results: list[dict]) -> str:

@@ -83,13 +83,14 @@
     },
     {
       "parameters": {
-        "message": "={{ $json.body.replace(/\\n/g, '<br />\\n') }}",
+        "message": "={{ $json.body }}",
         "options": {
           "sendTo": "={{ $json.lead_email }}"
         },
         "subject": "={{ $json.subject }}",
         "resource": "draft",
-        "emailType": "html"
+        "emailType": "text",
+        "operation": "create"
       },
       "id": "5",
       "name": "Gmail - Create Draft",
@@ -186,5 +187,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "tags": []
+  "tags": [],
+  "id": "dgeSafeGmailDraftHandoff02"
 }

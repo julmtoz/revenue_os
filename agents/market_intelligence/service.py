@@ -30,6 +30,8 @@ def ingest_evidence_batch(items: Iterable[dict[str, Any]]) -> dict[str, Any]:
 
     with get_session() as conn:
         for item in items:
+            if item.get("success") is False:
+                continue
             niche = str(item.get("niche") or "").strip()
             signal_type = str(item.get("signal_type") or "general").strip() or "general"
             query = str(item.get("query") or "").strip()

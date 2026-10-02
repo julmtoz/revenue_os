@@ -64,12 +64,14 @@ class LeadHuntRequest(BaseModel):
     city: str = Field(min_length=1, max_length=120)
     niche: str = Field(min_length=1, max_length=120)
     limit: int = Field(default=25, ge=1, le=50)
+    mock: bool = False
 
 
 class DraftRequest(BaseModel):
     limit: int = Field(default=20, ge=1, le=50)
     status: str = Field(default="qualified", min_length=1, max_length=40)
     mock: bool = False
+    lead_ids: list[int] | None = Field(default=None, max_length=50)
 
 
 class AuditRequest(BaseModel):
@@ -79,6 +81,7 @@ class AuditRequest(BaseModel):
 
 class ResearchRequest(BaseModel):
     query: str = Field(min_length=3, max_length=500)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalDecision(BaseModel):
@@ -96,6 +99,7 @@ def health() -> dict[str, Any]:
         "dry_run": settings.dry_run,
         "approval_mode": settings.approval_mode,
         "allow_external_send": settings.allow_external_send,
+        "allow_website_edit": settings.allow_website_edit,
     }
 
 
@@ -128,10 +132,10 @@ def get_mission(mission_id: int) -> dict[str, Any]:
 @app.post("/v1/research", dependencies=[Depends(require_api_key)])
 def run_research(payload: ResearchRequest) -> dict[str, Any]:
     result = research.execute(query=payload.query)
-    if not result.success:
-        raise HTTPException(status_code=502, detail=result.output)
     return {
+        "success": result.success,
         "query": payload.query,
+        "context": payload.context,
         "summary": result.output,
         "results": result.data or [],
         "next_action": result.next_action,
@@ -159,13 +163,14 @@ def list_leads(
 def hunt_leads(payload: LeadHuntRequest) -> dict[str, Any]:
     settings = get_settings()
     limit = min(payload.limit, settings.max_leads_per_run)
-    result = scrape_and_store(payload.city, payload.niche, limit=limit)
+    result = scrape_and_store(payload.city, payload.niche, limit=limit, mock=payload.mock)
     return {
         "lead_ids": result.lead_ids,
         "count": len(result.lead_ids),
         "fallback_used": result.fallback_used,
         "city": payload.city,
         "niche": payload.niche,
+        "mock": payload.mock,
     }
 
 
@@ -216,6 +221,7 @@ def create_drafts(payload: DraftRequest) -> dict[str, Any]:
             limit=limit,
             status=payload.status,
             mock=payload.mock,
+            lead_ids=payload.lead_ids,
         )
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -224,6 +230,7 @@ def create_drafts(payload: DraftRequest) -> dict[str, Any]:
         "status_filter": payload.status,
         "mock": payload.mock,
         "external_send_performed": False,
+        "decision_status": "HUMAN_REVIEW",
     }
 
 

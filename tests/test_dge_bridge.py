@@ -17,6 +17,8 @@ def test_bridge_exposes_safe_v1_surface():
         "/v1/missions",
         "/v1/missions/{mission_id}",
         "/v1/research",
+        "/v1/market-intelligence/scout",
+        "/v1/market-intelligence/scout/queries",
         "/v1/market-intelligence/evidence/batch",
         "/v1/market-intelligence/shortlist",
         "/v1/market-intelligence/evidence",
@@ -44,6 +46,9 @@ def test_dge01_workflow_is_importable_json_and_draft_only():
     draft_node = next(node for node in data["nodes"] if node["name"] == "Create Safe Drafts")
     assert "mock:true" in draft_node["parameters"]["body"].replace(" ", "")
     assert all("/send" not in str(node.get("parameters", {})).lower() for node in data["nodes"])
+    assert not any(node["type"] == "n8n-nodes-base.code" for node in data["nodes"])
+    result_node = next(node for node in data["nodes"] if node["name"] == "Result")
+    assert result_node["parameters"]["keepOnlySet"] is True
 
 
 def test_all_dge_workflows_are_valid_json():
@@ -65,16 +70,77 @@ def test_dge03_persists_and_scores_market_evidence():
     data = json.loads(path.read_text(encoding="utf-8"))
     node_names = {node["name"] for node in data["nodes"]}
 
-    assert "Build Evidence Batch" in node_names
+    assert data["name"] == "DGE-03 Demand Scout V1"
+    assert "Webhook Intake" in node_names
+    assert "Collect Evidence" in node_names
     assert "Persist and Score Markets" in node_names
-    assert "Expand Top 5" in node_names
+    assert "Respond" in node_names
+    assert not any(node["type"] == "n8n-nodes-base.code" for node in data["nodes"])
 
-    persist = next(node for node in data["nodes"] if node["name"] == "Persist and Score Markets")
-    assert "/v1/market-intelligence/evidence/batch" in persist["parameters"]["url"]
+    scout = next(node for node in data["nodes"] if node["name"] == "Collect Evidence")
+    assert "/v1/research" in scout["parameters"]["url"]
+    assert "context: $json.context" in scout["parameters"]["body"]
 
-    generator = next(node for node in data["nodes"] if node["name"] == "Generate Demand Queries")
-    code = generator["parameters"]["jsCode"]
-    assert "DGE_SIGNAL=" in code
-    assert "demand_spend" in code
-    assert "hiring" in code
-    assert "competition" in code
+
+def test_gmail_handoff_is_explicit_draft_create_only():
+    data = json.loads(Path("n8n/workflows/dge-02-safe-gmail-draft-handoff.json").read_text())
+    gmail = [node for node in data["nodes"] if node["type"] == "n8n-nodes-base.gmail"]
+    assert len(gmail) == 1
+    assert gmail[0]["parameters"]["resource"] == "draft"
+    assert gmail[0]["parameters"]["operation"] == "create"
+    assert data["active"] is False
+
+
+def test_research_api_preserves_context_and_failure_flag(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    import api
+    from agents.base_agent import AgentResult
+
+    monkeypatch.setenv("DGE_API_KEY", "unit-test-only")
+    monkeypatch.setattr(api.research, "execute", lambda **_: AgentResult(
+        success=False, output="Search unavailable", data=[],
+    ))
+    client = TestClient(api.app)
+    payload = {"query": "roofing hiring", "context": {"niche": "roofing", "signal_type": "hiring"}}
+    assert client.post("/v1/research", json=payload).status_code == 401
+    response = client.post("/v1/research", json=payload, headers={"X-DGE-API-Key": "unit-test-only"})
+    assert response.status_code == 200
+    assert response.json()["context"] == payload["context"]
+    assert response.json()["success"] is False
+    assert response.json()["results"] == []
+
+
+def test_scout_query_input_is_bounded_and_defaults_are_contextual():
+    import pytest
+    from pydantic import ValidationError
+
+    from market_api import MarketScoutRequest, market_scout_queries
+
+    items = market_scout_queries(MarketScoutRequest(niches=[" roofing ", "roofing"]))["items"]
+    assert len(items) == 3
+    assert {item["context"]["signal_type"] for item in items} == {"demand_spend", "hiring", "competition"}
+    assert all(item["context"]["niche"] == "roofing" for item in items)
+    assert len(market_scout_queries(MarketScoutRequest())["items"]) == 30
+    for niches in ([" "], ["a" * 121], ["roofing"] * 21):
+        with pytest.raises(ValidationError):
+            MarketScoutRequest(niches=niches)
+
+
+def test_dge_workflows_have_stable_ids_and_live_webhook_entrypoints():
+    specs = {
+        "dge-01-lead-research-to-drafts.json": (
+            "dgeLeadResearchToDrafts01",
+            "dge/lead-research",
+        ),
+        "dge-03-demand-scout-v0.json": (
+            "dgeDemandScout03",
+            "dge/demand-scout",
+        ),
+    }
+
+    for filename, (workflow_id, webhook_path) in specs.items():
+        data = json.loads(Path("n8n/workflows", filename).read_text(encoding="utf-8"))
+        assert data["id"] == workflow_id
+        webhook = next(node for node in data["nodes"] if node["type"] == "n8n-nodes-base.webhook")
+        assert webhook["parameters"]["path"] == webhook_path

@@ -1,182 +1,163 @@
 {
-  "name": "DGE-03 Demand Scout V0",
+  "name": "DGE-03 Demand Scout V1",
+  "id": "dgeDemandScout03",
+  "active": false,
+  "isArchived": false,
   "nodes": [
     {
-      "parameters": {},
-      "id": "1",
-      "name": "Manual Trigger",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dge/demand-scout",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "dge03-webhook",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
       "position": [
-        -760,
+        -360,
         0
-      ]
+      ],
+      "webhookId": "dge03-demand-scout-webhook"
     },
     {
+      "name": "Generate Demand Queries",
+      "id": "generate-demand-queries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -120,
+        0
+      ],
       "parameters": {
-        "values": {
-          "string": [
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/market-intelligence/scout/queries",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
             {
-              "name": "base_url",
-              "value": "http://host.docker.internal:8787"
-            },
-            {
-              "name": "api_key",
+              "name": "X-DGE-API-Key",
               "value": "CHANGE_ME_DGE_API_KEY"
             }
           ]
         },
-        "options": {}
-      },
-      "id": "2",
-      "name": "DGE Config",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
-      "position": [
-        -540,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const cfg = $input.first().json;\nconst niches = ['roofing','HVAC','plumbing','med spa','dentist','personal injury law','home remodeling','auto repair','property management','commercial cleaning'];\nconst signals = [\n  {type:'demand_spend', phrase:'businesses spending on lead generation digital marketing ads'},\n  {type:'hiring', phrase:'hiring marketing sales lead generation automation'},\n  {type:'competition', phrase:'agencies serving this niche lead generation marketing automation'}\n];\nreturn niches.flatMap(niche => signals.map(signal => ({json:{\n  base_url:cfg.base_url,\n  api_key:cfg.api_key,\n  niche,\n  signal_type:signal.type,\n  query:`DGE_NICHE=${niche} | DGE_SIGNAL=${signal.type} | US ${niche} ${signal.phrase}`\n}})));"
-      },
-      "id": "3",
-      "name": "Generate Demand Queries",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -300,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.base_url + '/v1/research' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-DGE-API-Key",
-              "value": "={{ $json.api_key }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({query:$json.query}) }}",
-        "options": {}
-      },
-      "id": "4",
-      "name": "Collect Evidence",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        -60,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const cfg = $('DGE Config').first().json;\nconst items = $input.all().map(item => {\n  const q = item.json.query || '';\n  const nicheMatch = q.match(/DGE_NICHE=([^|]+)\\s*\\|/);\n  const signalMatch = q.match(/DGE_SIGNAL=([^|]+)\\s*\\|/);\n  return {\n    niche: nicheMatch ? nicheMatch[1].trim() : 'unknown',\n    signal_type: signalMatch ? signalMatch[1].trim() : 'general',\n    query: q,\n    summary: item.json.summary || '',\n    results: Array.isArray(item.json.results) ? item.json.results : []\n  };\n});\nreturn [{json:{base_url:cfg.base_url,api_key:cfg.api_key,items}}];"
-      },
-      "id": "5",
-      "name": "Build Evidence Batch",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        180,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $json.base_url + '/v1/market-intelligence/evidence/batch' }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-DGE-API-Key",
-              "value": "={{ $json.api_key }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({items:$json.items}) }}",
-        "options": {}
-      },
-      "id": "6",
-      "name": "Persist and Score Markets",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        420,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const markets = Array.isArray($json.shortlist) ? $json.shortlist : [];\nreturn markets.map(m => ({json:{...m,decision_status:'HUMAN_REVIEW'}}));"
-      },
-      "id": "7",
-      "name": "Expand Top 5",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        660,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "values": {
-          "string": [
-            {
-              "name": "decision_status",
-              "value": "HUMAN_REVIEW"
-            }
-          ]
-        },
+        "body": "={{ JSON.stringify({niches: $json.body?.niches || []}) }}",
         "options": {
-          "includeOtherFields": true
+          "timeout": 180000
         }
-      },
-      "id": "8",
-      "name": "Human Decision Gate",
-      "type": "n8n-nodes-base.set",
-      "typeVersion": 2,
+      }
+    },
+    {
+      "name": "Split Queries",
+      "id": "split-queries",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
       "position": [
-        900,
+        100,
+        0
+      ],
+      "parameters": {
+        "fieldToSplitOut": "items",
+        "options": {}
+      }
+    },
+    {
+      "name": "Collect Evidence",
+      "id": "collect-evidence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/research",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({query: $json.query, context: $json.context}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "name": "Aggregate Evidence",
+      "id": "aggregate-evidence",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        540,
+        0
+      ],
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "items",
+        "options": {}
+      }
+    },
+    {
+      "name": "Persist and Score Markets",
+      "id": "persist-and-score-markets",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8787/v1/market-intelligence/evidence/batch",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-DGE-API-Key",
+              "value": "CHANGE_ME_DGE_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({items: $json.items.map(r => ({niche:r.context.niche, signal_type:r.context.signal_type, query:r.query, summary:r.summary, results:r.results, success:r.success}))}) }}",
+        "options": {
+          "timeout": 180000
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "dge03-respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        980,
         0
       ]
     }
   ],
   "connections": {
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "DGE Config",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "DGE Config": {
+    "Webhook Intake": {
       "main": [
         [
           {
@@ -191,6 +172,17 @@
       "main": [
         [
           {
+            "node": "Split Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Queries": {
+      "main": [
+        [
+          {
             "node": "Collect Evidence",
             "type": "main",
             "index": 0
@@ -202,14 +194,14 @@
       "main": [
         [
           {
-            "node": "Build Evidence Batch",
+            "node": "Aggregate Evidence",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Evidence Batch": {
+    "Aggregate Evidence": {
       "main": [
         [
           {
@@ -224,18 +216,7 @@
       "main": [
         [
           {
-            "node": "Expand Top 5",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expand Top 5": {
-      "main": [
-        [
-          {
-            "node": "Human Decision Gate",
+            "node": "Respond",
             "type": "main",
             "index": 0
           }
@@ -243,12 +224,13 @@
       ]
     }
   },
-  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
+  "staticData": null,
   "meta": {
     "templateCredsSetupCompleted": false
   },
+  "pinData": null,
   "tags": []
 }

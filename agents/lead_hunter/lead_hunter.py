@@ -4,10 +4,11 @@ from __future__ import annotations
 import asyncio
 import re
 from dataclasses import asdict, dataclass
-from typing import Dict, List, Optional, Tuple
 
 import httpx
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Error as PlaywrightError
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import async_playwright
 
 from core.config import get_settings
 from core.db import get_session, upsert_lead
@@ -29,7 +30,7 @@ DISALLOWED_TYPES = {"neighbourhood", "residential", "suburb", "county", "postcod
 
 @dataclass
 class ScrapeResult:
-    lead_ids: List[int]
+    lead_ids: list[int]
     fallback_used: bool
 
 
@@ -37,7 +38,7 @@ def _valid_phone_digits(phone: str | None) -> int:
     return sum(ch.isdigit() for ch in (phone or ""))
 
 
-def _has_reliable_contact(raw: Dict[str, str | None]) -> bool:
+def _has_reliable_contact(raw: dict[str, str | None]) -> bool:
     if raw.get("website"):
         return True
     return bool(raw.get("phone") and _valid_phone_digits(raw["phone"]) >= 10)
@@ -56,14 +57,14 @@ def _derive_status(score: float, is_stub: bool) -> str:
 _PHONE_RE = re.compile(r'[\(\d][\d\s\(\)\-\.]{7,}[\d]')
 
 
-def _extract_phone_from_text(text: str) -> Optional[str]:
+def _extract_phone_from_text(text: str) -> str | None:
     match = _PHONE_RE.search(text)
     return match.group(0).strip() if match else None
 
 
-async def _scrape_google_maps(city: str, niche: str, limit: int) -> List[Dict[str, str | None]]:
+async def _scrape_google_maps(city: str, niche: str, limit: int) -> list[dict[str, str | None]]:
     query = f"{niche} in {city}"
-    results: List[Dict[str, str | None]] = []
+    results: list[dict[str, str | None]] = []
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         try:
@@ -91,14 +92,14 @@ async def _scrape_google_maps(city: str, niche: str, limit: int) -> List[Dict[st
     return results
 
 
-def _nominatim_tokens(niche: str) -> List[str]:
+def _nominatim_tokens(niche: str) -> list[str]:
     tokens = [tok for tok in re.split(r"\W+", niche.lower()) if len(tok) >= 4]
     if not tokens:
         tokens = [niche.lower()]
     return tokens
 
 
-def _build_nominatim_entry(item: Dict[str, object], city: str, niche: str, tokens: List[str]) -> Tuple[Dict[str, str | None] | None, str | None]:
+def _build_nominatim_entry(item: dict[str, object], city: str, niche: str, tokens: list[str]) -> tuple[dict[str, str | None] | None, str | None]:
     extratags = item.get("extratags") or {}
     raw_name = item.get("name") or item.get("display_name") or ""
     name = raw_name.split(",")[0].strip()
@@ -132,7 +133,7 @@ def _build_nominatim_entry(item: Dict[str, object], city: str, niche: str, token
     return entry, None
 
 
-def _scrape_nominatim(city: str, niche: str, limit: int) -> Tuple[List[Dict[str, str | None]], List[str]]:
+def _scrape_nominatim(city: str, niche: str, limit: int) -> tuple[list[dict[str, str | None]], list[str]]:
     params = {
         "q": f"{niche} in {city}",
         "format": "jsonv2",
@@ -146,8 +147,8 @@ def _scrape_nominatim(city: str, niche: str, limit: int) -> Tuple[List[Dict[str,
     except httpx.HTTPError:
         return [], []
     data = resp.json()
-    results: List[Dict[str, str | None]] = []
-    rejected: List[str] = []
+    results: list[dict[str, str | None]] = []
+    rejected: list[str] = []
     tokens = _nominatim_tokens(niche)
     for item in data[:limit * 2]:  # fetch extra in case many are rejected
         entry, reason = _build_nominatim_entry(item, city, niche, tokens)
@@ -160,7 +161,7 @@ def _scrape_nominatim(city: str, niche: str, limit: int) -> Tuple[List[Dict[str,
     return results, rejected
 
 
-def _fallback_stub(city: str, niche: str, limit: int) -> List[Dict[str, str | None]]:
+def _fallback_stub(city: str, niche: str, limit: int) -> list[dict[str, str | None]]:
     demo = []
     for idx in range(min(limit, 5)):
         demo.append(
@@ -177,7 +178,7 @@ def _fallback_stub(city: str, niche: str, limit: int) -> List[Dict[str, str | No
     return demo
 
 
-def _score_lead(raw: Dict[str, str | None], city: str, niche: str) -> float:
+def _score_lead(raw: dict[str, str | None], city: str, niche: str) -> float:
     settings = get_settings()
     w = settings.scoring_weights
     score = 0.0
@@ -222,15 +223,29 @@ def _score_lead(raw: Dict[str, str | None], city: str, niche: str) -> float:
     return score
 
 
-def scrape_and_store(city: str, niche: str, limit: int = 25) -> ScrapeResult:
-    raw_results: List[Dict[str, str | None]] = []
+def scrape_and_store(city: str, niche: str, limit: int = 25, mock: bool = False) -> ScrapeResult:
+    raw_results: list[dict[str, str | None]] = []
     fallback_used = False
     fallback_source: str | None = None
-    nominatim_rejected: List[str] = []
-    try:
-        raw_results = asyncio.run(_scrape_google_maps(city, niche, limit))
-    except (PlaywrightTimeoutError, Exception):
-        raw_results = []
+    nominatim_rejected: list[str] = []
+    if mock:
+        raw_results = [
+            {
+                "name": f"DGE Smoke {city} {niche} {index + 1}",
+                "website": "https://example.invalid",
+                "phone": "202-555-0100",
+                "city": city,
+                "category": niche,
+                "source": "mock",
+                "notes": "Synthetic smoke lead; human review only; never contact.",
+            }
+            for index in range(limit)
+        ]
+    else:
+        try:
+            raw_results = asyncio.run(_scrape_google_maps(city, niche, limit))
+        except (PlaywrightTimeoutError, PlaywrightError, RuntimeError):
+            raw_results = []
 
     if not raw_results:
         nom_results, rejected = _scrape_nominatim(city, niche, limit)
@@ -245,7 +260,7 @@ def scrape_and_store(city: str, niche: str, limit: int = 25) -> ScrapeResult:
         fallback_used = True
         fallback_source = "fallback_stub"
 
-    stored_ids: List[int] = []
+    stored_ids: list[int] = []
     with get_session() as conn:
         for raw in raw_results:
             score = _score_lead(raw, city, niche)

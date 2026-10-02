@@ -26,17 +26,23 @@
             },
             {
               "name": "city",
-              "value": "Newark"
+              "value": "={{ String($json.body?.city ?? 'Newark').trim() }}"
             },
             {
               "name": "niche",
-              "value": "roofing"
+              "value": "={{ String($json.body?.niche ?? 'roofing').trim() }}"
             }
           ],
           "number": [
             {
               "name": "limit",
-              "value": 10
+              "value": "={{ Math.max(1, Math.min(50, Math.floor(Number($json.body?.limit) || 10))) }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "mock",
+              "value": "={{ $json.body?.mock !== false }}"
             }
           ]
         },
@@ -64,7 +70,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "3",
       "name": "Health Check",
@@ -95,8 +103,10 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({city: $('DGE Config').item.json.city, niche: $('DGE Config').item.json.niche, limit: $('DGE Config').item.json.limit}) }}",
-        "options": {}
+        "body": "={{ JSON.stringify({city: $('DGE Config').first().json.city, niche: $('DGE Config').first().json.niche, limit: $('DGE Config').first().json.limit, mock: $('DGE Config').first().json.mock}) }}",
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "4",
       "name": "Hunt Leads",
@@ -120,7 +130,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "5",
       "name": "Read Qualified Leads",
@@ -151,8 +163,10 @@
         "sendBody": true,
         "contentType": "raw",
         "rawContentType": "application/json",
-        "body": "={{ JSON.stringify({limit: $('DGE Config').item.json.limit, status: 'qualified', mock: true}) }}",
-        "options": {}
+        "body": "={{ JSON.stringify({limit: $('DGE Config').first().json.limit, status: 'qualified', mock: true, lead_ids: $('Hunt Leads').first().json.lead_ids}) }}",
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "6",
       "name": "Create Safe Drafts",
@@ -176,7 +190,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 180000
+        }
       },
       "id": "7",
       "name": "Read Approval Queue",
@@ -194,15 +210,34 @@
             {
               "name": "status",
               "value": "DGE-01 completed"
+            },
+            {
+              "name": "decision_status",
+              "value": "HUMAN_REVIEW"
             }
           ],
           "number": [
             {
               "name": "approvals_waiting",
               "value": "={{ $json.count || 0 }}"
+            },
+            {
+              "name": "leads_found",
+              "value": "={{ $('Hunt Leads').first().json.count }}"
+            },
+            {
+              "name": "drafts_created",
+              "value": "={{ $('Create Safe Drafts').first().json.created }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "external_send_performed",
+              "value": false
             }
           ]
         },
+        "keepOnlySet": true,
         "options": {}
       },
       "id": "8",
@@ -213,6 +248,23 @@
         780,
         0
       ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dge/lead-research",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "dge01-webhook",
+      "name": "Webhook Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -760,
+        180
+      ],
+      "webhookId": "dge01-webhook-webhook"
     }
   ],
   "connections": {
@@ -292,6 +344,17 @@
           }
         ]
       ]
+    },
+    "Webhook Intake": {
+      "main": [
+        [
+          {
+            "node": "DGE Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "active": false,
@@ -301,5 +364,6 @@
   "meta": {
     "templateCredsSetupCompleted": false
   },
-  "tags": []
+  "tags": [],
+  "id": "dgeLeadResearchToDrafts01"
 }

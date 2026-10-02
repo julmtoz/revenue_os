@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Sequence, Tuple
+from collections.abc import Sequence
 
 from jinja2 import Template
 from openai import OpenAI
@@ -14,7 +14,7 @@ from core.logger import log_action
 from core.models import LEAD_STATUS_RANK
 
 PROMPT_PATH = BASE_DIR / "prompts" / "outreach_email.txt"
-TARGETABLE_STATUSES: Tuple[str, ...] = ("qualified", "reviewed", "interested", "audit_ready")
+TARGETABLE_STATUSES: tuple[str, ...] = ("qualified", "reviewed", "interested", "audit_ready")
 
 
 def _load_prompt() -> Template:
@@ -26,8 +26,8 @@ def _valid_phone_digits(phone: str | None) -> int:
     return sum(ch.isdigit() for ch in (phone or ""))
 
 
-def _build_insight(row: Dict[str, str | None]) -> str:
-    hints: List[str] = []
+def _build_insight(row: dict[str, str | None]) -> str:
+    hints: list[str] = []
     if not row.get("website"):
         hints.append("We couldn't find a website, which costs leads.")
     if not row.get("phone"):
@@ -37,7 +37,7 @@ def _build_insight(row: Dict[str, str | None]) -> str:
     return hints[0] if hints else "Most sites like this still leak high-intent leads."
 
 
-def _personalization_quality(row: Dict[str, str | None]) -> str:
+def _personalization_quality(row: dict[str, str | None]) -> str:
     signals = 0
     if row.get("website"):
         signals += 1
@@ -50,13 +50,13 @@ def _personalization_quality(row: Dict[str, str | None]) -> str:
     return "high" if signals >= 3 else "low"
 
 
-def _has_reliable_contact(row: Dict[str, str | None]) -> bool:
+def _has_reliable_contact(row: dict[str, str | None]) -> bool:
     if row.get("website"):
         return True
     return bool(row.get("phone") and _valid_phone_digits(row["phone"]) >= 10)
 
 
-def _proof_hint(row: Dict[str, str | None]) -> str:
+def _proof_hint(row: dict[str, str | None]) -> str:
     if not row.get("website"):
         return "Couldn't find a quote form or owned site."
     if not row.get("phone") or _valid_phone_digits(row.get("phone")) < 10:
@@ -73,7 +73,7 @@ def _extract_response_text(response) -> str:
         if isinstance(response.output_text, list):
             return "\n".join(str(chunk) for chunk in response.output_text if chunk)
     if getattr(response, "output", None):
-        chunks: List[str] = []
+        chunks: list[str] = []
         for item in response.output:
             for content in getattr(item, "content", []) or []:
                 text = getattr(content, "text", None)
@@ -84,7 +84,7 @@ def _extract_response_text(response) -> str:
     return "{}"
 
 
-def _call_openai(template: Template, context: Dict[str, object]) -> Dict[str, str]:
+def _call_openai(template: Template, context: dict[str, object]) -> dict[str, str]:
     settings = get_settings()
     client = OpenAI()
     prompt = template.render(**context)
@@ -108,7 +108,7 @@ def _call_openai(template: Template, context: Dict[str, object]) -> Dict[str, st
     return data
 
 
-def _mock_email(context: Dict[str, object]) -> Dict[str, str]:
+def _mock_email(context: dict[str, object]) -> dict[str, str]:
     lead = context["lead"]
     lead_name = lead.get("name") or "there"
     city = lead.get("city") or context.get("desired_niche") or "your area"
@@ -150,8 +150,10 @@ def _should_promote(current: str | None, desired: str) -> bool:
     return LEAD_STATUS_RANK.get(desired, -1) > LEAD_STATUS_RANK.get(_normalize_status(current), -1)
 
 
-def _classify_sendability(lead: Dict[str, object], personalization: str, has_contact: bool) -> str:
+def _classify_sendability(lead: dict[str, object], personalization: str, has_contact: bool) -> str:
     if (lead.get("source") == "fallback_stub") or (_normalize_status(lead.get("status")) == "stub"):
+        return "do_not_send"
+    if lead.get("source") == "mock":
         return "do_not_send"
     if not has_contact:
         return "do_not_send"
@@ -169,7 +171,10 @@ def _append_lead_note(existing: str | None, note: str) -> str:
     return f"{existing} | {note}"
 
 
-def generate_email_drafts(limit: int = 20, status: str = "qualified", mock: bool = False) -> int:
+def generate_email_drafts(
+    limit: int = 20, status: str = "qualified", mock: bool = False,
+    lead_ids: list[int] | None = None,
+) -> int:
     if not mock:
         require_openai_api_key()
         template = _load_prompt()
@@ -184,10 +189,16 @@ def generate_email_drafts(limit: int = 20, status: str = "qualified", mock: bool
             SELECT * FROM leads
             WHERE status IN ({placeholders})
               AND source != 'fallback_stub'
-            ORDER BY score DESC
-            LIMIT ?
         """
-        rows = conn.execute(query, (*allowed_statuses, limit)).fetchall()
+        params = list(allowed_statuses)
+        if lead_ids is not None:
+            if not lead_ids:
+                return 0
+            query += " AND id IN (" + ",".join("?" for _ in lead_ids) + ")"
+            params.extend(lead_ids)
+        query += " AND NOT EXISTS (SELECT 1 FROM emails WHERE emails.lead_id = leads.id AND emails.status = 'draft')"
+        query += " ORDER BY score DESC LIMIT ?"
+        rows = conn.execute(query, (*params, limit)).fetchall()
         for row in rows:
             lead_dict = dict(row)
             personalization = _personalization_quality(lead_dict)
@@ -256,9 +267,7 @@ def generate_email_drafts(limit: int = 20, status: str = "qualified", mock: bool
                 """,
                 (row["id"], email.get("subject"), email.get("body"), 1, "draft", sendability, note),
             )
-            if sendability == "sendable" and _should_promote(row["status"], "emailed"):
-                conn.execute("UPDATE leads SET status = ? WHERE id = ?", ("emailed", row["id"]))
-            elif sendability == "needs_edit" and _should_promote(row["status"], "reviewed"):
+            if _should_promote(row["status"], "reviewed"):
                 conn.execute("UPDATE leads SET status = ? WHERE id = ?", ("reviewed", row["id"]))
             created += 1
     if created:
