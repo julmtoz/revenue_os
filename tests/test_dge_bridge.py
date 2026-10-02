@@ -85,9 +85,18 @@ def test_dge03_persists_and_scores_market_evidence():
 def test_gmail_handoff_is_explicit_draft_create_only():
     data = json.loads(Path("n8n/workflows/dge-02-safe-gmail-draft-handoff.json").read_text())
     gmail = [node for node in data["nodes"] if node["type"] == "n8n-nodes-base.gmail"]
-    assert len(gmail) == 1
-    assert gmail[0]["parameters"]["resource"] == "draft"
-    assert gmail[0]["parameters"]["operation"] == "create"
+    operations = {node["parameters"]["operation"] for node in gmail}
+    assert operations == {"create", "get"}
+    assert all(node["parameters"]["resource"] == "draft" for node in gmail)
+    assert all(node["credentials"]["gmailOAuth2"] == {
+        "id": "P7st5BStiXMH12dv", "name": "Gmail account",
+    } for node in gmail)
+    config = next(node for node in data["nodes"] if node["name"] == "DGE Config")
+    limit = next(value for value in config["parameters"]["values"]["number"] if value["name"] == "limit")
+    assert limit["value"] == 1
+    review = next(node for node in data["nodes"] if node["name"] == "Human Review Required")
+    assert review["parameters"]["keepOnlySet"] is True
+    assert all("send" not in node["parameters"].get("operation", "").lower() for node in gmail)
     assert data["active"] is False
 
 

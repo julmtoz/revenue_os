@@ -28,7 +28,7 @@
           "number": [
             {
               "name": "limit",
-              "value": 10
+              "value": 1
             }
           ]
         },
@@ -99,7 +99,35 @@
       "position": [
         260,
         0
-      ]
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "P7st5BStiXMH12dv",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "get",
+        "messageId": "={{ $json.id }}",
+        "options": {}
+      },
+      "id": "dge02-verify-draft",
+      "name": "Gmail - Verify Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        480,
+        0
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "P7st5BStiXMH12dv",
+          "name": "Gmail account"
+        }
+      }
     },
     {
       "parameters": {
@@ -108,9 +136,40 @@
             {
               "name": "status",
               "value": "Draft created in Gmail for human review"
+            },
+            {
+              "name": "decision_status",
+              "value": "HUMAN_REVIEW"
+            },
+            {
+              "name": "gmail_draft_id",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "name": "revenue_os_draft_id",
+              "value": "={{ String($('Split Drafts').first().json.id) }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $('Split Drafts').first().json.subject }}"
+            },
+            {
+              "name": "labels",
+              "value": "={{ JSON.stringify($json.message?.labelIds || $json.labelIds || []) }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "draft_created",
+              "value": true
+            },
+            {
+              "name": "email_sent",
+              "value": false
             }
           ]
         },
+        "keepOnlySet": true,
         "options": {}
       },
       "id": "6",
@@ -118,7 +177,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 2,
       "position": [
-        480,
+        700,
         0
       ]
     }
@@ -169,6 +228,17 @@
       ]
     },
     "Gmail - Create Draft": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Verify Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Verify Draft": {
       "main": [
         [
           {
